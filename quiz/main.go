@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/csv"
 	"flag"
 	"fmt"
@@ -16,108 +17,87 @@ type SolutionSet struct {
 	IsCorrect    bool
 }
 
-type UserSet struct {
-	*SolutionSet
-	UserResponse string
-	IsCorrect    bool
-}
-
-var (
-	fileName string
-	duration int
-)
-
 type SolutionSets map[int]*SolutionSet
 
-func dirationParser() {
-
+func main() {
+	fileName, duration := parseFlags()
+	solutionSets, err := prepareSolutionSets(fileName)
+	if err != nil {
+		fmt.Printf("Error preparing solution sets: %v\n", err)
+		os.Exit(1)
+	}
+	startTest(solutionSets, duration)
+	generateResult(solutionSets)
 }
 
-func init() {
-	flag.StringVar(&fileName, "filename", "quiz.csv", ".csv Answer Key Filepath")
-	flag.IntVar(&duration, "duration", 10, "Duration for test in seconds")
+func parseFlags() (string, int) {
+	fileName := flag.String("filename", "quiz.csv", ".csv Answer Key Filepath")
+	duration := flag.Int("duration", 10, "Duration for test in seconds")
 	flag.Parse()
-	if fileName == "" {
-		panic("Please provide Question Answer Filename")
+	if *fileName == "" {
+		fmt.Println("Please provide Question Answer Filename")
+		os.Exit(1)
 	}
+	return *fileName, *duration
 }
 
 func takeTest(solutionSets SolutionSets, done chan<- bool) {
+	reader := bufio.NewReader(os.Stdin)
 	for _, v := range solutionSets {
-		var userResponse string
-		fmt.Printf("%v:", v.Question)
-		fmt.Scanln(&userResponse)
-
-		userResponse = strings.TrimSpace(userResponse)
-		v.UserResponse = userResponse
-		if userResponse == v.Answer {
-			v.IsCorrect = true
-		}
+		fmt.Printf("%v: ", v.Question)
+		userResponse, _ := reader.ReadString('\n')
+		v.UserResponse = strings.TrimSpace(userResponse)
+		v.IsCorrect = strings.EqualFold(v.UserResponse, v.Answer)
 	}
 	done <- true
 }
 
-func prepareSolutionSets(fileName string) SolutionSets {
+func prepareSolutionSets(fileName string) (SolutionSets, error) {
 	f, err := os.Open(fileName)
 	if err != nil {
-		panic("cannot read quiz file")
+		return nil, fmt.Errorf("cannot open quiz file: %w", err)
 	}
+	defer f.Close()
+
 	csvReader := csv.NewReader(f)
 	records, err := csvReader.ReadAll()
 	if err != nil {
-		panic("cannot read quiz file")
+		return nil, fmt.Errorf("cannot read quiz file: %w", err)
 	}
 
-	solutionSets := map[int]*SolutionSet{}
-
+	solutionSets := make(SolutionSets)
 	for i, record := range records {
-		solutionSet := SolutionSet{
+		if len(record) != 2 {
+			return nil, fmt.Errorf("invalid record format at line %d", i+1)
+		}
+		solutionSets[i] = &SolutionSet{
 			Question: strings.TrimSpace(record[0]),
 			Answer:   strings.TrimSpace(record[1]),
 		}
-		solutionSets[i] = &solutionSet
 	}
-	return solutionSets
+	return solutionSets, nil
 }
 
-func startTest(solutionSets SolutionSets) {
-	timer := time.NewTimer(time.Duration(duration) * time.Second).C
+func startTest(solutionSets SolutionSets, duration int) {
+	timer := time.NewTimer(time.Duration(duration) * time.Second)
 	done := make(chan bool)
 	go takeTest(solutionSets, done)
 
-loop:
-	for {
-		select {
-		case <-timer:
-			fmt.Println("\nTime is up")
-			break loop
-		case <-done:
-			break loop
-		}
+	select {
+	case <-timer.C:
+		fmt.Println("\nTime is up")
+	case <-done:
+		timer.Stop()
 	}
 }
 
 func generateResult(solutionSets SolutionSets) {
-	var (
-		correctAttempts int
-		percentage      float64
-	)
+	correctAttempts := 0
 	for _, v := range solutionSets {
-		if v.UserResponse == v.Answer {
+		if v.IsCorrect {
 			correctAttempts++
 		}
 	}
-	percentage = float64(correctAttempts) / float64(len(solutionSets)) * 100
+	percentage := float64(correctAttempts) / float64(len(solutionSets)) * 100
 	fmt.Printf("You have scored %.2f%%\n", percentage)
-}
-
-func main() {
-	// Read csv and prepare Question Answer set
-	solutionSets := prepareSolutionSets(fileName)
-
-	// Take Test
-	startTest(solutionSets)
-
-	// Evaluate Results
-	generateResult(solutionSets)
 }
