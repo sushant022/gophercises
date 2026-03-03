@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"log"
 	"runtime"
 	"time"
-	"timepass/task"
+
+	"github.com/sushant022/gophercises/quiz"
+	"github.com/sushant022/gophercises/task"
 )
 
 func runTask() {
@@ -18,21 +22,18 @@ func runTask() {
 	ts.Report()
 }
 
-type line struct {
-}
-
-type Quiz struct {
-	filename string
-}
-
-func New(filename string) *Quiz {
-
-}
-
 func runQuiz() {
-
+	filename := flag.String("f", "quiz.csv", "csv file to load quiz")
+	duration := flag.Duration("d", 10*time.Second, "quiz duration")
+	flag.Parse()
+	q, err := quiz.New(*filename, *duration)
+	if err != nil {
+		log.Fatal(fmt.Errorf("quiz: Cannot load quiz %w", err))
+	}
+	q.Take()
+	q.Report()
 }
 
 func main() {
-
+	runQuiz()
 }
