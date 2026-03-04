@@ -29,6 +29,7 @@ func New(filename string, duration time.Duration) (*Quiz, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 
 	rows, err := csv.NewReader(f).ReadAll()
 	if err != nil {
