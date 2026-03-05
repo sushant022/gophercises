@@ -1,10 +1,16 @@
 package urlshort
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"go.yaml.in/yaml/v2"
 )
+
+type Mapping struct {
+	Path string `yaml:"path" json:"path"`
+	Url  string `yaml:"url" json:"url"`
+}
 
 // MapHandler will return an http.HandlerFunc (which also
 // implements http.Handler) that will attempt to map any
@@ -39,6 +45,7 @@ func MapHandler(pathsToUrls map[string]string, fallback http.Handler) http.Handl
 //
 // See MapHandler to create a similar http.HandlerFunc via
 // a mapping of paths to urls.
+
 func YAMLHandler(yml []byte, fallback http.Handler) (http.HandlerFunc, error) {
 	// TODO: Implement this...
 
@@ -46,7 +53,27 @@ func YAMLHandler(yml []byte, fallback http.Handler) (http.HandlerFunc, error) {
 		Path string `yaml:"path"`
 		Url  string `yaml:"url"`
 	}
-	err := yaml.Unmarshal(yml, &mappings)
+	err := yaml.UnmarshalStrict(yml, &mappings)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		for _, m := range mappings {
+			if m.Path == r.RequestURI {
+				http.Redirect(w, r, m.Url, 302)
+				return
+			}
+		}
+		fallback.ServeHTTP(w, r)
+	}, nil
+}
+
+func JSONHandler(yml []byte, fallback http.Handler) (http.HandlerFunc, error) {
+	// TODO: Implement this...
+
+	var mappings []Mapping
+	err := json.Unmarshal(yml, &mappings)
 	if err != nil {
 		return nil, err
 	}
